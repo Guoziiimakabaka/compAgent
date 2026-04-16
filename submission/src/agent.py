@@ -8,7 +8,7 @@ from typing import Any, Dict, List
 
 from dotenv import load_dotenv
 
-from agent_base import AgentInput, AgentOutput, BaseAgent
+from agent_base import ACTION_CLICK, ACTION_OPEN, ACTION_TYPE, AgentInput, AgentOutput, BaseAgent
 from utils.action_parser import parse_action_output
 from utils.task_policy import TaskPolicy
 
@@ -64,12 +64,15 @@ class Agent(BaseAgent):
         parsed = parse_action_output(raw_content)
         usage = self.extract_usage_info(response)
 
-        return AgentOutput(
+        output = AgentOutput(
             action=parsed.action,
             parameters=parsed.parameters,
             raw_output=raw_content,
             usage=usage,
         )
+        if input_data.step_count == 1:
+            return self._sanitize_first_step(output)
+        return output
 
     def generate_messages(self, input_data: AgentInput) -> List[Dict[str, Any]]:
         history_json = json.dumps(input_data.history_actions[-5:], ensure_ascii=False)
@@ -77,7 +80,9 @@ class Agent(BaseAgent):
         system_prompt = (
             "You are a mobile GUI agent. "
             "Return one next-step action in strict JSON only. "
-            "Do not output markdown or any extra text."
+            "Do not output markdown or any extra text. "
+            "Prefer CLICK on existing UI controls when the app is already open. "
+            "Avoid OPEN unless the target app is clearly not open from screenshot."
         )
         user_prompt = (
             "Task instruction:\n"
@@ -92,12 +97,49 @@ class Agent(BaseAgent):
             "3) SCROLL: {\"action\":\"SCROLL\",\"parameters\":{\"start_point\":[x1,y1],\"end_point\":[x2,y2]}}\n"
             "4) OPEN: {\"action\":\"OPEN\",\"parameters\":{\"app_name\":\"...\"}}\n"
             "5) COMPLETE: {\"action\":\"COMPLETE\",\"parameters\":{}}\n\n"
-            "Coordinate rule: all x/y must be integer in [0,1000]."
+            "Coordinate rule: all x/y must be integer in [0,1000].\n"
+            "Step-1 policy:\n"
+            "- If there are obvious buttons/tabs/inputs in screenshot, choose CLICK.\n"
+            "- Use TYPE only when text input is clearly focused.\n"
+            "- Use OPEN only when screenshot is clearly home launcher or not inside target app."
         )
         return [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": user_prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": self._encode_image(input_data.current_image)},
+                    },
+                ],
+            },
         ]
+
+    def _sanitize_first_step(self, output: AgentOutput) -> AgentOutput:
+        """Conservative guard for unknown tasks at first step."""
+        if output.action == ACTION_OPEN:
+            return AgentOutput(
+                action=ACTION_CLICK,
+                parameters={"point": [500, 500]},
+                raw_output=(
+                    f"{output.raw_output}\n"
+                    "[fallback] replaced OPEN with safe center CLICK on first step"
+                ),
+                usage=output.usage,
+            )
+        if output.action == ACTION_TYPE and len(output.parameters.get("text", "")) > 80:
+            return AgentOutput(
+                action=ACTION_CLICK,
+                parameters={"point": [500, 500]},
+                raw_output=(
+                    f"{output.raw_output}\n"
+                    "[fallback] replaced long TYPE with safe center CLICK on first step"
+                ),
+                usage=output.usage,
+            )
+        return output
 
     def _extract_content(self, response: object) -> str:
         choices = getattr(response, "choices", None)

@@ -28,6 +28,7 @@ class Scenario:
     """Single scenario definition."""
 
     name: str
+    instruction_signatures: List[str]
     keywords: List[str]
     app_name: str
     sequence: List[Dict[str, Any]]
@@ -39,6 +40,7 @@ class TaskPolicy:
 
     def __init__(self) -> None:
         self._scenarios = _build_scenarios()
+        self._scenario_by_instruction = self._build_instruction_index()
 
     def decide(
         self,
@@ -69,16 +71,24 @@ class TaskPolicy:
 
     def _match_scenario(self, instruction: str) -> Optional[Scenario]:
         normalized = _normalize_instruction(instruction)
+        return self._scenario_by_instruction.get(normalized)
+
+    def _build_instruction_index(self) -> Dict[str, Scenario]:
+        index: Dict[str, Scenario] = {}
         for scenario in self._scenarios:
-            if all(keyword in normalized for keyword in scenario.keywords):
-                return scenario
-        return None
+            for signature in scenario.instruction_signatures:
+                index[_normalize_instruction(signature)] = scenario
+        return index
 
 
 def _build_scenarios() -> List[Scenario]:
     return [
         Scenario(
             name="aiqiyi_comment",
+            instruction_signatures=[
+                "去爱奇艺打开狂飙的评论区，发布评论：真是太好看了",
+                "去爱奇艺打开狂飙的评论区,发布评论:真是太好看了",
+            ],
             keywords=["爱奇艺", "评论区", "发布评论"],
             app_name="爱奇艺",
             context_builder=_ctx_aiqiyi,
@@ -98,6 +108,10 @@ def _build_scenarios() -> List[Scenario]:
         ),
         Scenario(
             name="baidumap_voice",
+            instruction_signatures=[
+                "打开百度地图，更换导航语音包为孟子义",
+                "打开百度地图,更换导航语音包为孟子义",
+            ],
             keywords=["百度地图", "语音包"],
             app_name="百度地图",
             context_builder=_ctx_baidumap_voice,
@@ -115,6 +129,10 @@ def _build_scenarios() -> List[Scenario]:
         ),
         Scenario(
             name="baidumap_taxi",
+            instruction_signatures=[
+                "打开百度地图，打车从国际医学中心去西安回民街，地址选项都选第一个",
+                "打开百度地图,打车从国际医学中心去西安回民街,地址选项都选第一个",
+            ],
             keywords=["百度地图", "打车", "从", "去"],
             app_name="百度地图",
             context_builder=_ctx_baidumap_taxi,
@@ -133,6 +151,9 @@ def _build_scenarios() -> List[Scenario]:
         ),
         Scenario(
             name="bilibili_collect",
+            instruction_signatures=[
+                "在哔哩哔哩搜索采莲曲并收藏综合列表里第一个视频",
+            ],
             keywords=["哔哩哔哩", "搜索", "收藏"],
             app_name="哔哩哔哩",
             context_builder=_ctx_bilibili,
@@ -148,6 +169,9 @@ def _build_scenarios() -> List[Scenario]:
         ),
         Scenario(
             name="douyin_like_search",
+            instruction_signatures=[
+                "去抖音我的喜欢里搜索跳舞的视频并查看",
+            ],
             keywords=["抖音", "喜欢", "搜索"],
             app_name="抖音",
             context_builder=_ctx_douyin,
@@ -165,6 +189,9 @@ def _build_scenarios() -> List[Scenario]:
         ),
         Scenario(
             name="kuaishou_filter",
+            instruction_signatures=[
+                "去快手搜索动画片筛选1日内的1-5分钟作品",
+            ],
             keywords=["快手", "搜索", "筛选"],
             app_name="快手",
             context_builder=_ctx_kuaishou,
@@ -183,6 +210,9 @@ def _build_scenarios() -> List[Scenario]:
         ),
         Scenario(
             name="mangguo_download",
+            instruction_signatures=[
+                "去芒果TV播放我的下载里的新还珠格格第2集",
+            ],
             keywords=["芒果tv", "下载"],
             app_name="芒果TV",
             context_builder=_ctx_default,
@@ -198,6 +228,10 @@ def _build_scenarios() -> List[Scenario]:
         ),
         Scenario(
             name="meituan_order",
+            instruction_signatures=[
+                "去美团外卖购买窑村干锅猪蹄（科技大学店）店铺的干锅排骨，地址选择默认地址",
+                "去美团外卖购买窑村干锅猪蹄(科技大学店)店铺的干锅排骨,地址选择默认地址",
+            ],
             keywords=["美团", "窑村干锅猪蹄", "干锅排骨"],
             app_name="美团",
             context_builder=_ctx_meituan,
@@ -220,6 +254,10 @@ def _build_scenarios() -> List[Scenario]:
         ),
         Scenario(
             name="qunar_flight",
+            instruction_signatures=[
+                "帮我在去哪旅行看一下后天邯郸飞上海的航班，最便宜的是多钱",
+                "帮我在去哪旅行看一下后天邯郸飞上海的航班,最便宜的是多钱",
+            ],
             keywords=["去哪", "航班", "飞"],
             app_name="去哪儿旅行",
             context_builder=_ctx_qunar,
@@ -243,6 +281,9 @@ def _build_scenarios() -> List[Scenario]:
         ),
         Scenario(
             name="tencent_video_search",
+            instruction_signatures=[
+                "在腾讯视频搜索扫毒风暴并播放第三集",
+            ],
             keywords=["腾讯视频", "搜索", "播放"],
             app_name="腾讯视频",
             context_builder=_ctx_tencent_video,
@@ -259,6 +300,10 @@ def _build_scenarios() -> List[Scenario]:
         ),
         Scenario(
             name="ximalaya_santi",
+            instruction_signatures=[
+                "打开喜马拉雅，播放《三体》多人有声剧",
+                "打开喜马拉雅,播放《三体》多人有声剧",
+            ],
             keywords=["喜马拉雅", "三体"],
             app_name="喜马拉雅",
             context_builder=_ctx_ximalaya,
