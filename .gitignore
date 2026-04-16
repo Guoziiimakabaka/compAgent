@@ -1,0 +1,5 @@
+﻿.env
+__pycache__/
+submission/src/__pycache__/
+submission/src/utils/__pycache__/
+code-for-student/output/
