@@ -71,7 +71,7 @@ class Agent(BaseAgent):
             usage=usage,
         )
         if input_data.step_count == 1:
-            return self._sanitize_first_step(output)
+            return self._sanitize_first_step(output, input_data.instruction)
         return output
 
     def generate_messages(self, input_data: AgentInput) -> List[Dict[str, Any]]:
@@ -117,7 +117,7 @@ class Agent(BaseAgent):
             },
         ]
 
-    def _sanitize_first_step(self, output: AgentOutput) -> AgentOutput:
+    def _sanitize_first_step(self, output: AgentOutput, instruction: str) -> AgentOutput:
         """Conservative guard for unknown tasks at first step."""
         if output.action == ACTION_OPEN:
             return AgentOutput(
@@ -129,16 +129,22 @@ class Agent(BaseAgent):
                 ),
                 usage=output.usage,
             )
-        if output.action == ACTION_TYPE and len(output.parameters.get("text", "")) > 80:
-            return AgentOutput(
-                action=ACTION_CLICK,
-                parameters={"point": [500, 500]},
-                raw_output=(
-                    f"{output.raw_output}\n"
-                    "[fallback] replaced long TYPE with safe center CLICK on first step"
-                ),
-                usage=output.usage,
+        if output.action == ACTION_TYPE:
+            text_value = output.parameters.get("text", "")
+            looks_like_sentence = any(token in text_value for token in ["，", "。", ",", ".", "！", "？"])
+            instruction_needs_click_first = any(
+                token in instruction for token in ["评论", "好评", "评价", "留言", "发布"]
             )
+            if len(text_value) > 20 or looks_like_sentence or instruction_needs_click_first:
+                return AgentOutput(
+                    action=ACTION_CLICK,
+                    parameters={"point": [500, 500]},
+                    raw_output=(
+                        f"{output.raw_output}\n"
+                        "[fallback] replaced first-step TYPE with safe center CLICK"
+                    ),
+                    usage=output.usage,
+                )
         return output
 
     def _extract_content(self, response: object) -> str:

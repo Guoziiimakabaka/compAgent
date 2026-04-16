@@ -54,6 +54,14 @@ def _load_payload(raw_text: str) -> Dict[str, Any]:
     if not text:
         raise ActionParseError("model output is empty")
 
+    shorthand_payload = _try_parse_shorthand(text)
+    if shorthand_payload is not None:
+        return shorthand_payload
+
+    function_payload = _try_parse_function_call(text)
+    if function_payload is not None:
+        return function_payload
+
     candidates = [text]
 
     code_block = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", text)
@@ -73,6 +81,146 @@ def _load_payload(raw_text: str) -> Dict[str, Any]:
             return loaded
 
     raise ActionParseError("model output is not valid JSON object")
+
+
+def _try_parse_shorthand(text: str) -> Dict[str, Any] | None:
+    """
+    Parse shorthand style output, for example:
+    - CLICK:[[100,200]]
+    - TYPE:['hello']
+    - OPEN:['淘宝']
+    - COMPLETE:[]
+    """
+    match = re.search(
+        r"\b(CLICK|TYPE|SCROLL|OPEN|COMPLETE)\s*[:：]\s*([^\n\r]+)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+
+    action_raw = match.group(1).upper()
+    body = match.group(2).strip()
+
+    if action_raw == ACTION_CLICK:
+        numbers = _extract_numbers(body)
+        if len(numbers) < 2:
+            return None
+        return {
+            "action": ACTION_CLICK,
+            "parameters": {"point": [numbers[0], numbers[1]]},
+        }
+
+    if action_raw == ACTION_SCROLL:
+        numbers = _extract_numbers(body)
+        if len(numbers) < 4:
+            return None
+        return {
+            "action": ACTION_SCROLL,
+            "parameters": {
+                "start_point": [numbers[0], numbers[1]],
+                "end_point": [numbers[2], numbers[3]],
+            },
+        }
+
+    if action_raw == ACTION_OPEN:
+        text_value = _extract_quoted_text(body)
+        if text_value is None:
+            return None
+        return {"action": ACTION_OPEN, "parameters": {"app_name": text_value}}
+
+    if action_raw == ACTION_TYPE:
+        text_value = _extract_quoted_text(body)
+        if text_value is None:
+            return None
+        return {"action": ACTION_TYPE, "parameters": {"text": text_value}}
+
+    if action_raw == ACTION_COMPLETE:
+        return {"action": ACTION_COMPLETE, "parameters": {}}
+
+    return None
+
+
+def _try_parse_function_call(text: str) -> Dict[str, Any] | None:
+    """
+    Parse function-call style output, for example:
+    - click(point='<point>100 200</point>')
+    - type(content='搜索词')
+    - open(app_name='淘宝')
+    """
+    match = re.search(
+        r"\b(click|type|scroll|open|complete)\s*\(([\s\S]*?)\)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+
+    action_name = match.group(1).lower()
+    arguments = match.group(2).strip()
+    action = ACTION_ALIAS.get(action_name)
+    if action is None:
+        return None
+
+    if action == ACTION_CLICK:
+        numbers = _extract_numbers(arguments)
+        if len(numbers) < 2:
+            return None
+        return {"action": ACTION_CLICK, "parameters": {"point": [numbers[0], numbers[1]]}}
+
+    if action == ACTION_SCROLL:
+        numbers = _extract_numbers(arguments)
+        if len(numbers) < 4:
+            return None
+        return {
+            "action": ACTION_SCROLL,
+            "parameters": {
+                "start_point": [numbers[0], numbers[1]],
+                "end_point": [numbers[2], numbers[3]],
+            },
+        }
+
+    if action == ACTION_OPEN:
+        app_name = _extract_key_value_string(arguments, ["app_name", "app"])
+        if app_name is None:
+            app_name = _extract_quoted_text(arguments)
+        if app_name is None:
+            return None
+        return {"action": ACTION_OPEN, "parameters": {"app_name": app_name}}
+
+    if action == ACTION_TYPE:
+        text_value = _extract_key_value_string(arguments, ["text", "content"])
+        if text_value is None:
+            text_value = _extract_quoted_text(arguments)
+        if text_value is None:
+            return None
+        return {"action": ACTION_TYPE, "parameters": {"text": text_value}}
+
+    if action == ACTION_COMPLETE:
+        return {"action": ACTION_COMPLETE, "parameters": {}}
+
+    return None
+
+
+def _extract_key_value_string(arguments: str, keys: List[str]) -> str | None:
+    for key in keys:
+        pattern = rf"{key}\s*=\s*['\"]([^'\"]+)['\"]"
+        match = re.search(pattern, arguments, flags=re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+    return None
+
+
+def _extract_quoted_text(text: str) -> str | None:
+    match = re.search(r"['\"]([^'\"]+)['\"]", text)
+    if match:
+        return match.group(1).strip()
+    return None
+
+
+def _extract_numbers(text: str) -> List[int]:
+    values = re.findall(r"-?\d+(?:\.\d+)?", text)
+    return [int(round(float(value))) for value in values]
 
 
 
