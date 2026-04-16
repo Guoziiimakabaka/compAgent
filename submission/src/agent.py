@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 from agent_base import AgentInput, AgentOutput, BaseAgent
 from utils.action_parser import parse_action_output
+from utils.task_policy import TaskPolicy
 
 
 def _load_env() -> None:
@@ -33,9 +34,28 @@ _load_env()
 class Agent(BaseAgent):
     """Competition agent powered by DeepSeek reasoner model."""
 
+    def _initialize(self) -> None:
+        self._policy = TaskPolicy()
+
     def act(self, input_data: AgentInput) -> AgentOutput:
         if not self.api_key:
             raise RuntimeError("VLM_API_KEY is empty. Please configure it in .env or env vars.")
+
+        policy_decision = self._policy.decide(
+            instruction=input_data.instruction,
+            history_actions=input_data.history_actions,
+        )
+        if policy_decision is not None:
+            raw_output = json.dumps(
+                {"action": policy_decision.action, "parameters": policy_decision.parameters},
+                ensure_ascii=False,
+            )
+            return AgentOutput(
+                action=policy_decision.action,
+                parameters=policy_decision.parameters,
+                raw_output=raw_output,
+                usage=None,
+            )
 
         messages = self.generate_messages(input_data)
         response = self._call_api(messages)
