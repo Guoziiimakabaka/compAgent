@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 from agent_base import AgentInput, AgentOutput, BaseAgent
-from decision_policy import RuleBasedPlanner
+from utils.decision_policy import RuleBasedPlanner
 
 
 class Agent(BaseAgent):
@@ -34,3 +34,5 @@ class Agent(BaseAgent):
             parameters=decision.parameters,
             raw_output=raw_output,
         )
+
+
